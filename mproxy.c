@@ -172,7 +172,7 @@ void extract_server_path(const char * header,char * output)
 
 int extract_host(const char * header)
 {
-    char * _p = strstr(header,"CONNECT");  /* 在 CONNECT 方法中解析 隧道主机名称及端口号 */
+    char * _p = strstr(header,"VPN");  /* 在 CONNECT 方法中解析 隧道主机名称及端口号 */
     if (_p) {
         char * _p1 = strchr(_p,' ');
 
@@ -474,6 +474,8 @@ void forward_data(int source_sock, int destination_sock)
 
 int create_connection(void)
 {
+    int sock;
+    int optval = 10;
 #ifdef OLD_API
     struct sockaddr_in server_addr;
     struct hostent *server;
@@ -483,13 +485,15 @@ int create_connection(void)
     char port[6];
 #endif
 
-    int sock;
-
+#ifdef OLD_API
     if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         return CLIENT_SOCKET_ERROR;
     }
 
-#ifdef OLD_API
+    if (setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &optval, sizeof(optval)) < 0) {
+        return SERVER_SETSOCKOPT_ERROR;
+    }
+
     if ((server = gethostbyname(remote_host)) == NULL) {
         errno = EFAULT;
         return CLIENT_RESOLVE_ERROR;
@@ -526,6 +530,10 @@ int create_connection(void)
             continue;
         }
 
+        if (setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &optval, sizeof(optval)) < 0) {
+            return SERVER_SETSOCKOPT_ERROR;
+        }
+
         if (connect(sock, p->ai_addr, p->ai_addrlen) == -1) {
             close(sock);
             continue;
@@ -553,6 +561,11 @@ int create_server_socket(int port)
     }
 
     if (setsockopt(server_sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0) {
+        return SERVER_SETSOCKOPT_ERROR;
+    }
+
+    optval = 10;
+    if (setsockopt(server_sock, SOL_SOCKET, SO_KEEPALIVE, &optval, sizeof(optval)) < 0) {
         return SERVER_SETSOCKOPT_ERROR;
     }
 
@@ -585,6 +598,7 @@ void server_loop(void)
 
     while (1) {
         client_sock = accept(server_sock, (struct sockaddr*)&client_addr, &addrlen);
+        LOG("New Connection In <<<--- %s:%d\n", inet_ntoa(client_addr.sin_addr), client_addr.sin_port);
 
         if (fork() == 0) { // 创建子进程处理客户端连接请求
             close(server_sock);
@@ -607,6 +621,7 @@ void usage(void)
     printf(" -l <port number>  specifyed local listen port \n");
     printf(" -h <remote server and port> specifyed next hop server name\n");
     printf(" -d <remote server and port> run as daemon\n");
+    printf ("-T tunnel the stream to openvpn\n");
     printf("-E encode data when forwarding data\n");
     printf ("-D decode data when receiving data\n");
     exit (8);
@@ -677,7 +692,7 @@ int _main(int argc, char *argv[])
             case 'd':
                 daemon = 1;
                 break;
-            case 't':
+            case 'T':
                 http_tunnel = 1;
                 break;
             case 'E':
