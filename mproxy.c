@@ -56,6 +56,7 @@ int client_sock;
 int remote_sock;
 
 int http_tunnel;
+int passwd_check;
 
 
 char * header_buffer ;
@@ -314,17 +315,24 @@ void handle_client(int client_sock, struct sockaddr_in client_addr)
     if (strlen(remote_host) == 0) {/* 未指定远端主机名称从http 请求 HOST 字段中获取 */
 #ifdef DEBUG
         LOG(" ============ handle new client ============\n");
-        LOG(">>>Header:%s\n",header_buffer);
 #endif
 
         if (read_header(client_sock,header_buffer) < 0) {
             LOG("Read Http header failed\n");
             return;
         } else {
+#ifdef DEBUG
+            LOG(">>>Header:%s\n",header_buffer);
+#endif
             char * p = strstr(header_buffer,"CONNECT"); /* 判断是否是http 隧道请求 */
             if (p) {
                 LOG("receive CONNECT request\n");
                 is_http_tunnel = 1;
+            }
+
+            if (passwd_check && (strstr(header_buffer,"USER: xxxxxxxx") == NULL)) {
+                LOG("Check user pass failed\n");
+                return;
             }
 
             if (strstr(header_buffer,"GET /mproxy") >0) {
@@ -347,11 +355,19 @@ void handle_client(int client_sock, struct sockaddr_in client_addr)
     if (http_tunnel == 1) {
 #ifdef DEBUG
         LOG(" ============ handle new client ============\n");
-        LOG(">>>Header:%s\n",header_buffer);
 #endif
 
         if (read_header(client_sock,header_buffer) < 0) {
             LOG("Read Http header failed\n");
+            return;
+        }
+
+#ifdef DEBUG
+        LOG(">>>Header:%s\n",header_buffer);
+#endif
+
+        if (passwd_check && (strstr(header_buffer,"USER: 12345678$$&&") == NULL)) {
+            LOG("Check user pass failed\n");
             return;
         }
 
@@ -622,6 +638,7 @@ void usage(void)
     printf(" -h <remote server and port> specifyed next hop server name\n");
     printf(" -d <remote server and port> run as daemon\n");
     printf ("-T tunnel the stream to openvpn\n");
+    printf ("-P check the user password\n");
     printf("-E encode data when forwarding data\n");
     printf ("-D decode data when receiving data\n");
     exit (8);
@@ -668,12 +685,13 @@ int _main(int argc, char *argv[])
     local_port = DEFAULT_LOCAL_PORT;
     io_flag = FLG_NONE;
     http_tunnel = 0;
+    passwd_check = 0;
     int daemon = 0; 
 
     char info_buf[2048];
 
     int opt;
-    char optstrs[] = ":l:h:dtED";
+    char optstrs[] = ":l:h:dPTED";
     char *p = NULL;
     while (-1 != (opt = getopt(argc, argv, optstrs))) {
         switch (opt) {
@@ -694,6 +712,9 @@ int _main(int argc, char *argv[])
                 break;
             case 'T':
                 http_tunnel = 1;
+                break;
+            case 'P':
+                passwd_check = 1;
                 break;
             case 'E':
                 io_flag = W_S_ENC;
