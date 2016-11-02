@@ -1,6 +1,5 @@
-#CC = gcc
-CC = ~/workspace/repo/git/priv/rt-n56u/toolchain-mipsel/toolchain-3.4.x/bin/mipsel-linux-uclibc-gcc
-CFLAGS = -g -Wall -Werror
+CC ?= gcc
+CFLAGS = -g -Wall -Werror -DDBUG
 
 all: mproxy
 
