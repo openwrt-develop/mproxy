@@ -43,7 +43,11 @@
 #define LOG(fmt...) __android_log_print(ANDROID_LOG_DEBUG,__FILE__,##fmt)
 
 #else
-#define LOG(fmt...)  do { fprintf(stderr,"%s %s ",__DATE__,__TIME__); fprintf(stderr, ##fmt); } while(0)
+#include <syslog.h>
+
+//#define LOG(fmt...)  do { fprintf(stderr,"%s %s ",__DATE__,__TIME__); fprintf(stderr, ##fmt); } while(0)
+#define LOG(fmt...)  do { syslog(LOG_INFO, ##fmt); } while(0)
+
 #endif
 
 
@@ -628,7 +632,8 @@ void server_loop(void)
 
 void stop_server(void)
 {
-    kill(m_pid, SIGKILL);        
+    closelog();
+    kill(m_pid, SIGKILL);
 }
 
 void usage(void)
@@ -732,6 +737,7 @@ int _main(int argc, char *argv[])
         }
     }
 
+    openlog("mproxy", LOG_CONS | LOG_PID | LOG_NDELAY, LOG_USER);
     get_info(info_buf);
     LOG("%s\n",info_buf);
     start_server(daemon);
